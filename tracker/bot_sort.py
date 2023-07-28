@@ -446,8 +446,8 @@ class BoTSORT(object):
         self.removed_stracks.extend(removed_stracks)
         self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(self.tracked_stracks, self.lost_stracks)
 
-        # output_stracks = [track for track in self.tracked_stracks if track.is_activated]
-        output_stracks = [track for track in self.tracked_stracks]
+        output_stracks = [track for track in self.tracked_stracks if track.is_activated]
+        # output_stracks = [track for track in self.tracked_stracks]
 
 
         return output_stracks
