@@ -237,7 +237,7 @@ class BoTSORT(object):
         if with_reid:
             self.encoder = FastReIDInterface(fast_reid_config, fast_reid_weights, device)
 
-        self.gmc = GMC(method=cmc_method)
+        self.gmc = GMC(method=cmc_method, downscale=3)
 
     def update(self, output_results, img, masks=None):
         self.frame_id += 1
