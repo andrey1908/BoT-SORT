@@ -203,32 +203,40 @@ class STrack(BaseTrack):
 
 
 class BoTSORT(object):
-    def __init__(self, args, frame_rate=30):
+    def __init__(self, track_high_thresh=0.6, track_low_thresh=0.1, new_track_thresh=0.7,
+            match_thresh=0.8, track_buffer=30, frame_rate=30,
+            mot20=False, cmc_method="sparseOptFlow",
+            with_reid=False, proximity_thresh=0.5, appearance_thresh=0.25,
+            fast_reid_config=r"fast_reid/configs/MOT17/sbs_S50.yml",
+            fast_reid_weights=r"pretrained/mot17_sbs_S50.pth", device="cuda"):
 
-        self.tracked_stracks = []  # type: list[STrack]
-        self.lost_stracks = []  # type: list[STrack]
-        self.removed_stracks = []  # type: list[STrack]
+        self.tracked_stracks = []
+        self.lost_stracks = []
+        self.removed_stracks = []
         BaseTrack.clear_count()
 
         self.frame_id = 0
-        self.args = args
 
-        self.track_high_thresh = args.track_high_thresh
-        self.track_low_thresh = args.track_low_thresh
-        self.new_track_thresh = args.new_track_thresh
+        self.track_high_thresh = track_high_thresh
+        self.track_low_thresh = track_low_thresh
+        self.new_track_thresh = new_track_thresh
+        self.match_thresh = match_thresh
 
-        self.buffer_size = int(frame_rate / 30.0 * args.track_buffer)
+        self.with_reid = with_reid
+        self.mot20 = mot20
+
+        self.buffer_size = int(frame_rate / 30.0 * track_buffer)
         self.max_time_lost = self.buffer_size
         self.kalman_filter = KalmanFilter()
 
         # ReID module
-        self.proximity_thresh = args.proximity_thresh
-        self.appearance_thresh = args.appearance_thresh
+        self.proximity_thresh = proximity_thresh
+        self.appearance_thresh = appearance_thresh
 
-        if args.with_reid:
-            self.encoder = FastReIDInterface(args.fast_reid_config, args.fast_reid_weights, args.device)
+        if with_reid:
+            self.encoder = FastReIDInterface(fast_reid_config, fast_reid_weights, device)
 
-        self.gmc = GMC(method=args.cmc_method)
+        self.gmc = GMC(method=cmc_method)
 
     def update(self, output_results, img, masks=None):
         self.frame_id += 1
@@ -260,7 +268,7 @@ class BoTSORT(object):
             masks = masks[lowest_inds]
 
             # Find high threshold detections
-            remain_inds = scores > self.args.track_high_thresh
+            remain_inds = scores > self.track_high_thresh
             dets = bboxes[remain_inds]
             scores_keep = scores[remain_inds]
             classes_keep = classes[remain_inds]
@@ -277,12 +285,12 @@ class BoTSORT(object):
             masks_keep = []
 
         '''Extract embeddings '''
-        if self.args.with_reid:
+        if self.with_reid:
             features_keep = self.encoder.inference(img, dets)
 
         if len(dets) > 0:
             '''Detections'''
-            if self.args.with_reid:
+            if self.with_reid:
                 detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, f, mask=mask) for
                               (tlbr, s, f, mask) in zip(dets, scores_keep, features_keep, masks_keep)]
             else:
@@ -315,10 +323,10 @@ class BoTSORT(object):
         ious_dists = matching.iou_distance(strack_pool, detections)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
 
-        if not self.args.mot20:
+        if not self.mot20:
             ious_dists = matching.fuse_score(ious_dists, detections)
 
-        if self.args.with_reid:
+        if self.with_reid:
             emb_dists = matching.embedding_distance(strack_pool, detections) / 2.0
             raw_emb_dists = emb_dists.copy()
             emb_dists[emb_dists > self.appearance_thresh] = 1.0
@@ -336,7 +344,7 @@ class BoTSORT(object):
         else:
             dists = ious_dists
 
-        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.args.match_thresh)
+        matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.match_thresh)
 
         for itracked, idet in matches:
             track = strack_pool[itracked]
@@ -350,8 +358,8 @@ class BoTSORT(object):
 
         ''' Step 3: Second association, with low score detection boxes'''
         if len(scores):
-            inds_high = scores < self.args.track_high_thresh
-            inds_low = scores > self.args.track_low_thresh
+            inds_high = scores < self.track_high_thresh
+            inds_low = scores > self.track_low_thresh
             inds_second = np.logical_and(inds_low, inds_high)
             dets_second = bboxes[inds_second]
             scores_second = scores[inds_second]
@@ -394,10 +402,10 @@ class BoTSORT(object):
         detections = [detections[i] for i in u_detection]
         ious_dists = matching.iou_distance(unconfirmed, detections)
         ious_dists_mask = (ious_dists > self.proximity_thresh)
-        if not self.args.mot20:
+        if not self.mot20:
             ious_dists = matching.fuse_score(ious_dists, detections)
 
-        if self.args.with_reid:
+        if self.with_reid:
             emb_dists = matching.embedding_distance(unconfirmed, detections) / 2.0
             raw_emb_dists = emb_dists.copy()
             emb_dists[emb_dists > self.appearance_thresh] = 1.0
