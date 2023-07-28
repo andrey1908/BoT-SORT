@@ -35,7 +35,7 @@ def _indices_to_matches(cost_matrix, indices, thresh):
     return matches, unmatched_a, unmatched_b
 
 
-def linear_assignment(cost_matrix, thresh):
+def linear_assignment(cost_matrix, thresh=1.0):
     if cost_matrix.size == 0:
         return np.empty((0, 2), dtype=int), tuple(range(cost_matrix.shape[0])), tuple(range(cost_matrix.shape[1]))
     matches, unmatched_a, unmatched_b = [], [], []
@@ -194,4 +194,14 @@ def fuse_score(cost_matrix, detections):
     det_scores = np.expand_dims(det_scores, axis=0).repeat(cost_matrix.shape[0], axis=0)
     fuse_sim = iou_sim * det_scores
     fuse_cost = 1 - fuse_sim
+    return fuse_cost
+
+
+def fuse_class_id(cost_matrix, tracks, detections):
+    if cost_matrix.size == 0:
+        return cost_matrix
+    tracks_classes = np.array([track.class_id for track in tracks])
+    detections_classes = np.array([detection.class_id for detection in detections])
+    classes_same = (tracks_classes[:, np.newaxis] == detections_classes[np.newaxis, :])
+    fuse_cost = np.where(classes_same, cost_matrix, 2.0)  # max cost thresh is 1.0
     return fuse_cost

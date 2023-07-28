@@ -14,7 +14,7 @@ from fast_reid.fast_reid_interfece import FastReIDInterface
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
 
-    def __init__(self, tlwh, score, feat=None, feat_history=50, mask=None):
+    def __init__(self, tlwh, score, feat=None, feat_history=50, class_id=-1, mask=None):
 
         # wait activate
         self._tlwh = np.asarray(tlwh, dtype=np.float)
@@ -23,6 +23,7 @@ class STrack(BaseTrack):
         self.is_activated = False
 
         self.score = score
+        self.class_id = class_id
         self.mask = mask
         self.tracklet_len = 0
 
@@ -109,6 +110,7 @@ class STrack(BaseTrack):
         if new_id:
             self.track_id = self.next_id()
         self.score = new_track.score
+        assert self.class_id == new_track.class_id
         self.mask = new_track.mask
 
     def update(self, new_track, frame_id):
@@ -133,6 +135,7 @@ class STrack(BaseTrack):
         self.is_activated = True
 
         self.score = new_track.score
+        assert self.class_id == new_track.class_id
         self.mask = new_track.mask
 
     @property
@@ -247,11 +250,11 @@ class BoTSORT(object):
             if output_results.shape[1] == 5:
                 scores = output_results[:, 4]
                 bboxes = output_results[:, :4]
-                classes = output_results[:, -1]
+                classes = np.full(scores.shape, -1, dtype=int)
             else:
-                scores = output_results[:, 4] * output_results[:, 5]
-                bboxes = output_results[:, :4]  # x1y1x2y2
-                classes = output_results[:, -1]
+                scores = output_results[:, 4]
+                bboxes = output_results[:, :4]
+                classes = output_results[:, 5].astype(int)
 
             if masks is None:
                 masks = np.array([None] * len(scores))
@@ -289,11 +292,11 @@ class BoTSORT(object):
         if len(dets) > 0:
             '''Detections'''
             if self.with_reid:
-                detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, f, mask=mask) for
-                              (tlbr, s, f, mask) in zip(dets, scores_keep, features_keep, masks_keep)]
+                detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, f, class_id=c, mask=mask) for
+                    (tlbr, s, f, c, mask) in zip(dets, scores_keep, features_keep, classes_keep, masks_keep)]
             else:
-                detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, mask=mask) for
-                              (tlbr, s, mask) in zip(dets, scores_keep, masks_keep)]
+                detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, class_id=c, mask=mask) for
+                    (tlbr, s, c, mask) in zip(dets, scores_keep, classes_keep, masks_keep)]
         else:
             detections = []
 
@@ -342,6 +345,7 @@ class BoTSORT(object):
         else:
             dists = ious_dists
 
+        dists = matching.fuse_class_id(dists, strack_pool, detections)
         matches, u_track, u_detection = matching.linear_assignment(dists, thresh=self.match_thresh)
 
         for itracked, idet in matches:
@@ -372,13 +376,14 @@ class BoTSORT(object):
         # association the untrack to the low score detections
         if len(dets_second) > 0:
             '''Detections'''
-            detections_second = [STrack(STrack.tlbr_to_tlwh(tlbr), s, mask=mask) for
-                                 (tlbr, s, mask) in zip(dets_second, scores_second, masks_second)]
+            detections_second = [STrack(STrack.tlbr_to_tlwh(tlbr), s, class_id=c, mask=mask) for
+                (tlbr, s, c, mask) in zip(dets_second, scores_second, classes_second, masks_second)]
         else:
             detections_second = []
 
         r_tracked_stracks = [strack_pool[i] for i in u_track if strack_pool[i].state == TrackState.Tracked]
         dists = matching.iou_distance(r_tracked_stracks, detections_second)
+        dists = matching.fuse_class_id(dists, r_tracked_stracks, detections_second)
         matches, u_track, u_detection_second = matching.linear_assignment(dists, thresh=0.5)
         for itracked, idet in matches:
             track = r_tracked_stracks[itracked]
@@ -413,6 +418,7 @@ class BoTSORT(object):
         else:
             dists = ious_dists
 
+        dists = matching.fuse_class_id(dists, unconfirmed, detections)
         matches, u_unconfirmed, u_detection = matching.linear_assignment(dists, thresh=0.7)
         for itracked, idet in matches:
             unconfirmed[itracked].update(detections[idet], self.frame_id)
