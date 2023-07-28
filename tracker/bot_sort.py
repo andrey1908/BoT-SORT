@@ -319,7 +319,6 @@ class BoTSORT(object):
 
         # Associate with high score detection boxes
         ious_dists = matching.iou_distance(strack_pool, detections)
-        ious_dists_mask = (ious_dists > self.proximity_thresh)
 
         if not self.mot20:
             ious_dists = matching.fuse_score(ious_dists, detections)
@@ -328,6 +327,7 @@ class BoTSORT(object):
             emb_dists = matching.embedding_distance(strack_pool, detections) / 2.0
             raw_emb_dists = emb_dists.copy()
             emb_dists[emb_dists > self.appearance_thresh] = 1.0
+            ious_dists_mask = (ious_dists > self.proximity_thresh)
             emb_dists[ious_dists_mask] = 1.0
             dists = np.minimum(ious_dists, emb_dists)
 
@@ -399,7 +399,7 @@ class BoTSORT(object):
         '''Deal with unconfirmed tracks, usually tracks with only one beginning frame'''
         detections = [detections[i] for i in u_detection]
         ious_dists = matching.iou_distance(unconfirmed, detections)
-        ious_dists_mask = (ious_dists > self.proximity_thresh)
+
         if not self.mot20:
             ious_dists = matching.fuse_score(ious_dists, detections)
 
@@ -407,6 +407,7 @@ class BoTSORT(object):
             emb_dists = matching.embedding_distance(unconfirmed, detections) / 2.0
             raw_emb_dists = emb_dists.copy()
             emb_dists[emb_dists > self.appearance_thresh] = 1.0
+            ious_dists_mask = (ious_dists > self.proximity_thresh)
             emb_dists[ious_dists_mask] = 1.0
             dists = np.minimum(ious_dists, emb_dists)
         else:
