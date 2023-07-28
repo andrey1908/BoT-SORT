@@ -204,8 +204,7 @@ class STrack(BaseTrack):
 
 class BoTSORT(object):
     def __init__(self, track_high_thresh=0.6, track_low_thresh=0.1, new_track_thresh=0.7,
-            match_thresh=0.8, track_buffer=30, frame_rate=30,
-            mot20=False, cmc_method="sparseOptFlow",
+            match_thresh=0.8, track_buffer_size=30, mot20=False, cmc_method="sparseOptFlow",
             with_reid=False, proximity_thresh=0.5, appearance_thresh=0.25,
             fast_reid_config=r"fast_reid/configs/MOT17/sbs_S50.yml",
             fast_reid_weights=r"pretrained/mot17_sbs_S50.pth", device="cuda"):
@@ -225,8 +224,7 @@ class BoTSORT(object):
         self.with_reid = with_reid
         self.mot20 = mot20
 
-        self.buffer_size = int(frame_rate / 30.0 * track_buffer)
-        self.max_time_lost = self.buffer_size
+        self.track_buffer_size = int(track_buffer_size)
         self.kalman_filter = KalmanFilter()
 
         # ReID module
@@ -434,7 +432,7 @@ class BoTSORT(object):
 
         """ Step 5: Update state"""
         for track in self.lost_stracks:
-            if self.frame_id - track.end_frame > self.max_time_lost:
+            if self.frame_id - track.end_frame > self.track_buffer_size:
                 track.mark_removed()
                 removed_stracks.append(track)
 
