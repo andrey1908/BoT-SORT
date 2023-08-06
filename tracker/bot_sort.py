@@ -227,7 +227,7 @@ class BoTSORT(object):
         self.with_reid = with_reid
         self.mot20 = mot20
 
-        self.track_buffer_size = int(track_buffer_size)
+        self.track_buffer_size = track_buffer_size
         self.kalman_filter = KalmanFilter()
 
         # ReID module
