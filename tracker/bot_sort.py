@@ -14,7 +14,7 @@ from fast_reid.fast_reid_interfece import FastReIDInterface
 class STrack(BaseTrack):
     shared_kalman = KalmanFilter()
 
-    def __init__(self, tlwh, score, feat=None, feat_history=50, class_id=-1, mask=None):
+    def __init__(self, tlwh, score, feat=None, feat_history=50, class_id=-1, info=None):
 
         # wait activate
         self._tlwh = np.asarray(tlwh, dtype=np.float)
@@ -24,7 +24,7 @@ class STrack(BaseTrack):
 
         self.score = score
         self.class_id = class_id
-        self.mask = mask
+        self.info = info
         self.tracklet_len = 0
 
         self.smooth_feat = None
@@ -111,7 +111,7 @@ class STrack(BaseTrack):
             self.track_id = self.next_id()
         self.score = new_track.score
         assert self.class_id == new_track.class_id
-        self.mask = new_track.mask
+        self.info = new_track.info
 
     def update(self, new_track, frame_id):
         """
@@ -136,7 +136,7 @@ class STrack(BaseTrack):
 
         self.score = new_track.score
         assert self.class_id == new_track.class_id
-        self.mask = new_track.mask
+        self.info = new_track.info
 
     @property
     def tlwh(self):
@@ -239,7 +239,7 @@ class BoTSORT(object):
 
         self.gmc = GMC(method=cmc_method, downscale=3)
 
-    def update(self, output_results, img, masks=None):
+    def update(self, output_results, img, infos=None):
         self.frame_id += 1
         activated_starcks = []
         refind_stracks = []
@@ -256,34 +256,34 @@ class BoTSORT(object):
                 bboxes = output_results[:, :4]
                 classes = output_results[:, 5].astype(int)
 
-            if masks is None:
-                masks = np.array([None] * len(scores))
+            if infos is None:
+                infos = np.array([None] * len(scores))
             else:
-                assert len(scores) == len(masks)
+                assert len(scores) == len(infos)
 
             # Remove bad detections
             lowest_inds = scores > self.track_low_thresh
             bboxes = bboxes[lowest_inds]
             scores = scores[lowest_inds]
             classes = classes[lowest_inds]
-            masks = masks[lowest_inds]
+            infos = infos[lowest_inds]
 
             # Find high threshold detections
             remain_inds = scores > self.track_high_thresh
             dets = bboxes[remain_inds]
             scores_keep = scores[remain_inds]
             classes_keep = classes[remain_inds]
-            masks_keep = masks[remain_inds]
+            infos_keep = infos[remain_inds]
 
         else:
             bboxes = []
             scores = []
             classes = []
-            masks = []
+            infos = []
             dets = []
             scores_keep = []
             classes_keep = []
-            masks_keep = []
+            infos_keep = []
 
         '''Extract embeddings '''
         if self.with_reid:
@@ -292,11 +292,11 @@ class BoTSORT(object):
         if len(dets) > 0:
             '''Detections'''
             if self.with_reid:
-                detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, f, class_id=c, mask=mask) for
-                    (tlbr, s, f, c, mask) in zip(dets, scores_keep, features_keep, classes_keep, masks_keep)]
+                detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, f, class_id=c, info=info) for
+                    (tlbr, s, f, c, info) in zip(dets, scores_keep, features_keep, classes_keep, infos_keep)]
             else:
-                detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, class_id=c, mask=mask) for
-                    (tlbr, s, c, mask) in zip(dets, scores_keep, classes_keep, masks_keep)]
+                detections = [STrack(STrack.tlbr_to_tlwh(tlbr), s, class_id=c, info=info) for
+                    (tlbr, s, c, info) in zip(dets, scores_keep, classes_keep, infos_keep)]
         else:
             detections = []
 
@@ -366,18 +366,18 @@ class BoTSORT(object):
             dets_second = bboxes[inds_second]
             scores_second = scores[inds_second]
             classes_second = classes[inds_second]
-            masks_second = masks[inds_second]
+            infos_second = infos[inds_second]
         else:
             dets_second = []
             scores_second = []
             classes_second = []
-            masks_second = []
+            infos_second = []
 
         # association the untrack to the low score detections
         if len(dets_second) > 0:
             '''Detections'''
-            detections_second = [STrack(STrack.tlbr_to_tlwh(tlbr), s, class_id=c, mask=mask) for
-                (tlbr, s, c, mask) in zip(dets_second, scores_second, classes_second, masks_second)]
+            detections_second = [STrack(STrack.tlbr_to_tlwh(tlbr), s, class_id=c, info=info) for
+                (tlbr, s, c, info) in zip(dets_second, scores_second, classes_second, infos_second)]
         else:
             detections_second = []
 
